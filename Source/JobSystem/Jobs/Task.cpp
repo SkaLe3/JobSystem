@@ -7,7 +7,7 @@
 namespace SV
 {
 
-	void TaskEvent::AddSubsequent(std::unique_ptr<Task> task)
+	void TaskEvent::AddSubsequent(std::shared_ptr<JobTask> task)
 	{
 		ScopedSpinLock lock(m_Lock);
 
@@ -16,11 +16,12 @@ namespace SV
 		{
 			// Release lock before dispatching to avoid deadlock
 			lock.~ScopedSpinLock();
-			JobSystem::Get().DispatchTask(std::move(task));
+			std::unique_ptr<JobTask> uniqueTask(task.get());
+			JobSystem::Get().DispatchTask(std::move(uniqueTask));
 			return;
 		}
 		task->IncrementPrerequisiteCount();
-		m_Subsequents.push_back(std::move(task));
+		m_Subsequents.push_back(task);
 	}
 
 	void TaskEvent::Complete()
@@ -34,7 +35,7 @@ namespace SV
 		}
 
 		// Dispatch all dependent tasks
-		std::vector<std::unique_ptr<Task>> dependents;
+		std::vector<std::shared_ptr<JobTask>> dependents;
 		{
 			ScopedSpinLock lock(m_Lock);
 			dependents = std::move(m_Subsequents);
@@ -45,7 +46,7 @@ namespace SV
 			int32_t remainingPrereqs = task->DecrementPrerequisiteCount();
 			if (remainingPrereqs == 0)
 			{
-				JobSystem::Get().DispatchTask(std::move(task));
+				JobSystem::Get().DispatchTask(task);
 			}
 		}
 	}
@@ -75,9 +76,9 @@ namespace SV
 	}
 
 
-	std::shared_ptr<SV::TaskEvent> Task::CreateAndDispatch(TaskFunction&& function, const std::vector<std::shared_ptr<TaskEvent>>& prerequisites, ENamedThreads desiredThread /*= ENamedThreads::AnyThread*/)
+	std::shared_ptr<SV::TaskEvent> JobTask::CreateAndDispatch(TaskFunction&& function, const std::vector<std::shared_ptr<TaskEvent>>& prerequisites, ENamedThreads desiredThread /*= ENamedThreads::AnyThread*/)
 	{
-		std::unique_ptr<Task> task = std::make_unique<Task>(std::move(function), desiredThread);
+		std::shared_ptr<JobTask> task = std::make_shared<JobTask>(std::move(function), desiredThread);
 		std::shared_ptr<TaskEvent> taskEvent = std::make_shared<TaskEvent>();
 		task->SetEvent(taskEvent);
 		
@@ -96,14 +97,14 @@ namespace SV
 			{
 				if (prereq && !prereq->IsComplete())
 				{
-					prereq->AddSubsequent(std::move(task));
+					prereq->AddSubsequent(task);
 					pendingCount++;
 				}
 			}
 		}
 		else
 		{
-			JobSystem::Get().DispatchTask(std::move(task));
+			JobSystem::Get().DispatchTask(task);
 		}
 
 // 		if (prerequisites.empty() && desiredThread == ENamedThreads::AnyThread && JobSystem::Get().IsWorkerThread(std::this_thread::get_id()))

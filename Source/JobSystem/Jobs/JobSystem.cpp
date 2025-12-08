@@ -35,6 +35,7 @@ namespace SV
 
 			m_WorkerMap[workerHandle->GetId()] = runnablePtr;
 			m_WorkerHandles.push_back(std::move(workerHandle));
+			m_WorkerHandles.back()->Launch();
 		}
 
 		while (m_ReadyWorkerCount.load(std::memory_order_acquire) < m_TotalWorkerCount)
@@ -82,7 +83,7 @@ namespace SV
 		return std::clamp(requestedCount, 1, maxWorkers);
 	}
 
-	void JobSystem::DispatchTask(std::unique_ptr<Task> task)
+	void JobSystem::DispatchTask(std::shared_ptr<JobTask> task)
 	{
 		ENamedThreads desiredThread = task->GetDesiredThread();
 		if (desiredThread == ENamedThreads::AnyThread)
@@ -94,28 +95,28 @@ namespace SV
 			if (it != m_WorkerMap.end())
 			{
 				// On worker
-				it->second->GetLocalQueue()->Push(std::move(task));
+				it->second->GetLocalQueue()->Push(task);
 			}
 			else
 			{
 				// on game thread
-				m_GlobalQueue.Push(std::move(task));
+				m_GlobalQueue.Push(task);
 			}
 		}
 		else
 		{
 			// Named thread execution
 			// TODO: Implement named thread queues
-			m_GlobalQueue.Push(std::move(task));
+			m_GlobalQueue.Push(task);
 		}
 	}
 
-	std::unique_ptr<Task> JobSystem::PopGlobalQueue()
+	std::shared_ptr<JobTask> JobSystem::PopGlobalQueue()
 	{
 		return m_GlobalQueue.Pop();
 	}
 
-	std::unique_ptr<Task> JobSystem::StealTaskFor(int32_t thiefId)
+	std::shared_ptr<JobTask> JobSystem::StealTaskFor(int32_t thiefId)
 	{
 		// Steal in round-robin fashion
 		for (int32_t i = 0; i < m_TotalWorkerCount; ++i)
@@ -126,7 +127,7 @@ namespace SV
 			ITaskQueue* victimQueue = victim->GetRunnable()->GetLocalQueue();
 			if (victimQueue)
 			{
-				std::unique_ptr<Task> stolen = victimQueue->Steal();
+				std::shared_ptr<JobTask> stolen = victimQueue->Steal();
 				if (stolen)
 				{
 					return stolen;
@@ -137,14 +138,21 @@ namespace SV
 		return nullptr;
 	}
 
-	std::unique_ptr<Task> JobSystem::WaitForTask(std::atomic<bool>& stopFlag)
-	{
-		return m_GlobalQueue.WaitAndPop(stopFlag);
-	}
 
 	bool JobSystem::IsWorkerThread(std::thread::id threadId)
 	{
 		return m_WorkerMap.find(threadId) != m_WorkerMap.end();
+	}
+
+	WorkerThread* JobSystem::GetCurrentWorker()
+	{
+		std::thread::id currentThreadId = std::this_thread::get_id();
+		auto it = m_WorkerMap.find(currentThreadId);
+		if (it != m_WorkerMap.end())
+		{
+			return it->second;
+		}
+		return nullptr;
 	}
 
 	void JobSystem::WorkerThreadReady()
@@ -152,6 +160,7 @@ namespace SV
 		m_ReadyWorkerCount.fetch_add(1, std::memory_order_release);
 		while (m_ReadyWorkerCount.load(std::memory_order_acquire) < m_TotalWorkerCount) { std::this_thread::yield(); }
 	}
+
 
 }
 

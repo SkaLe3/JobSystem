@@ -16,7 +16,7 @@ namespace SV
 
 		while (!IsStopRequested())
 		{
-			std::unique_ptr<Task> task = AcquireTask();
+			std::shared_ptr<JobTask> task = AcquireTask();
 
 			if (task)
 			{
@@ -33,32 +33,32 @@ namespace SV
 						__builtin_ia32_pause();
 					#endif
 				}
-				else if (idleSpinCount < MAX_IDLE_SPINS * 2)
+				else //if (idleSpinCount < MAX_IDLE_SPINS * 2)
 				{
 					// Yield to OS
 					std::this_thread::yield();
 				}
-				else
-				{
-					// Sleep
-					std::unique_ptr<Task> waitTask = m_JobSystem->WaitForTask(m_StopRequested);
-
-					if (waitTask)
-					{
-						ExecuteTask(std::move(waitTask));
-						idleSpinCount = 0;
-					}
-				}
+// 				else
+// 				{
+// 					// Sleep
+// 					//std::shared_ptr<JobTask> waitTask = m_JobSystem->WaitForTask(m_StopRequested);
+// 
+// 					if (waitTask)
+// 					{
+// 						ExecuteTask(waitTask);
+// 						idleSpinCount = 0;
+// 					}
+// 				}
 			}
 		}
 
 		m_TaskQueue.Clear();
 	}
 
-	std::unique_ptr<Task> WorkerThread::AcquireTask()
+	std::shared_ptr<JobTask> WorkerThread::AcquireTask()
 	{
 		// 1. Try local queue first (best cahche locality)
-		std::unique_ptr<Task> task = m_TaskQueue.Pop();
+		std::shared_ptr<JobTask> task = m_TaskQueue.Pop();
 		if (task)
 		{
 			return task;
@@ -80,7 +80,7 @@ namespace SV
 		return nullptr;
 	}
 
-	void WorkerThread::ExecuteTask(std::unique_ptr<Task> task)
+	void WorkerThread::ExecuteTask(std::shared_ptr<JobTask> task)
 	{
 		// TODO: integrate profiling
 		std::chrono::high_resolution_clock::time_point t1, t2;

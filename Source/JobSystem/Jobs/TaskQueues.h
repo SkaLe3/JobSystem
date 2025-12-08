@@ -13,26 +13,26 @@ namespace SV
 	class TaskGlobalQueue : public ITaskQueue
 	{
 	public:
-		void Push(std::unique_ptr<Task> task) override
+		void Push(std::shared_ptr<JobTask> task) override
 		{
 			{
 				std::unique_lock<std::mutex> lock(m_Mutex);
-				m_TaskQueue.push_back(std::move(task));
+				m_TaskQueue.push_back(task);
 			}
 			m_Cv.notify_one();
 		}
-		std::unique_ptr<Task> Pop() override
+		std::shared_ptr<JobTask> Pop() override
 		{
 			std::unique_lock<std::mutex> lock(m_Mutex);
 			if (m_TaskQueue.empty())
 			{
 				return nullptr;
 			}
-			std::unique_ptr<Task> task = std::move(m_TaskQueue.front());
+			std::shared_ptr<JobTask> task = m_TaskQueue.front();
 			m_TaskQueue.pop_front();
 			return task;
 		}
-		std::unique_ptr<Task> Steal() override { return nullptr; }
+		std::shared_ptr<JobTask> Steal() override { return nullptr; }
 
 		void Clear() override
 		{
@@ -53,7 +53,7 @@ namespace SV
 		}
 
 		// Wait for a task to become available
-		std::unique_ptr<Task> WaitAndPop(std::atomic<bool>& stopFlag)
+		std::shared_ptr<JobTask> WaitAndPop(std::atomic<bool>& stopFlag)
 		{
 			std::unique_lock<std::mutex> lock(m_Mutex);
 
@@ -80,7 +80,7 @@ namespace SV
 		}
 
 	private:
-		std::deque<std::unique_ptr<Task>> m_TaskQueue;
+		std::deque<std::shared_ptr<JobTask>> m_TaskQueue;
 		mutable std::mutex m_Mutex;
 		std::condition_variable m_Cv;
 	};
@@ -90,34 +90,34 @@ namespace SV
 	class TaskLocalQueue : public ITaskQueue
 	{
 	public:
-		void Push(std::unique_ptr<Task> task) override
+		void Push(std::shared_ptr<JobTask> task) override
 		{
 			ScopedSpinLock lock(m_Lock);
-			m_TaskQueue.push_back(std::move(task));
+			m_TaskQueue.push_back(task);
 		}
 
 		// Pop from back (LIFO for better cache locality)
-		std::unique_ptr<Task> Pop() override
+		std::shared_ptr<JobTask> Pop() override
 		{
 			ScopedSpinLock lock(m_Lock);
 			if (m_TaskQueue.empty())
 			{
 				return nullptr;
 			}
-			std::unique_ptr<Task> lastTask = std::move(m_TaskQueue.back());
+			std::shared_ptr<JobTask> lastTask = m_TaskQueue.back();
 			m_TaskQueue.pop_back();
 			return lastTask;
 		}
 
 		// Steal from front (FIFO to avoid contention with owner)
-		std::unique_ptr<Task> Steal() override
+		std::shared_ptr<JobTask> Steal() override
 		{
 			ScopedSpinLock lock(m_Lock);
 			if (m_TaskQueue.empty())
 			{
 				return nullptr;
 			}
-			std::unique_ptr<Task> frontTask = std::move(m_TaskQueue.front());
+			std::shared_ptr<JobTask> frontTask = m_TaskQueue.front();
 			m_TaskQueue.pop_front();
 			return frontTask;
 		}
@@ -141,7 +141,7 @@ namespace SV
 		}
 
 	private:
-		std::deque<std::unique_ptr<Task>> m_TaskQueue;
+		std::deque<std::shared_ptr<JobTask>> m_TaskQueue;
 		SpinLock m_Lock;
 	};
 

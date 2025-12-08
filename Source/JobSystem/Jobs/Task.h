@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/Defines.h"
 #include "Threading/ThreadTypes.h"
 #include "Threading/Synchronization.h"
 
@@ -6,17 +7,20 @@
 #include <memory>
 #include <vector>
 #include <atomic>
+#include <mutex>
+#include <iostream>
+
 
 namespace SV
 {
 	class TaskEvent;
 
-	class Task
+	class JobTask
 	{
 	public:
 		using TaskFunction = std::function<void()>;
 
-		Task(TaskFunction&& function, ENamedThreads desiredThread = ENamedThreads::AnyThread)
+		JobTask(TaskFunction&& function, ENamedThreads desiredThread = ENamedThreads::AnyThread)
 			: m_TaskEntryPoint(std::move(function))
 			, m_DesiredThread(desiredThread)
 			, m_PrerequisiteCount(0)
@@ -82,7 +86,7 @@ namespace SV
 	public:
 		TaskEvent() = default;
 
-		void AddSubsequent(std::unique_ptr<Task> task);
+		void AddSubsequent(std::shared_ptr<JobTask> task);
 		void Complete();
 		void Wait(); // Blocking wait for completion
 		bool IsComplete() const
@@ -90,7 +94,7 @@ namespace SV
 			return m_Completed.load(std::memory_order_acquire);
 		}
 	private:
-		std::vector<std::unique_ptr<Task>> m_Subsequents;
+		std::vector<std::shared_ptr<JobTask>> m_Subsequents;
 		std::atomic<bool> m_Completed{ false };
 		SpinLock m_Lock; // Protects m_Subsequents vector
 	};
