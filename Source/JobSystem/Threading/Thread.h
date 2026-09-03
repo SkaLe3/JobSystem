@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <mutex>
 
 namespace SV
 {
@@ -11,7 +12,7 @@ namespace SV
 	{
 	public:
 		static std::unique_ptr<Thread> Create(
-			std::unique_ptr<IThreadRunnable> inRunnable, 
+			std::unique_ptr<IThreadRunnable> inRunnable,
 			const std::string& threadName,
 			EThreadPriority priority = EThreadPriority::Low)
 		{
@@ -43,6 +44,15 @@ namespace SV
 			}
 		}
 
+		void Launch()
+		{
+			{
+				std::unique_lock<std::mutex> lock(m_Mutex);
+				m_bReady = true;
+			}
+			m_Cv.notify_one();
+		}
+
 		void RequestStop()
 		{
 			m_Runnable->RequestStop();
@@ -54,7 +64,7 @@ namespace SV
 		const std::string& GetName() const { return m_Name; }
 
 	private:
-		Thread(std::unique_ptr<IThreadRunnable> inRunnable, 
+		Thread(std::unique_ptr<IThreadRunnable> inRunnable,
 			const std::string& threadName,
 			EThreadPriority priority)
 			: m_Name(threadName)
@@ -69,8 +79,11 @@ namespace SV
 			std::cout << "[Thread] '" << m_Name << "' started with ID: " << m_ThreadId << "\n";
 		}
 
+
 		void Execute()
 		{
+			std::unique_lock<std::mutex> lock(m_Mutex);
+			m_Cv.wait(lock, [this]{return m_bReady; });
 			// Set thread priority here
 			m_Runnable->Run();
 		}
@@ -82,5 +95,8 @@ namespace SV
 		std::thread m_Thread;
 		std::thread::id m_ThreadId;
 		EThreadPriority m_Priority;
+		std::mutex m_Mutex;
+		std::condition_variable m_Cv;
+		bool m_bReady = false;
 	};
 }

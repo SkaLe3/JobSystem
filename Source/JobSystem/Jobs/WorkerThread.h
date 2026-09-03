@@ -15,6 +15,7 @@ namespace SV
 			: m_WorkerId(workerId)
 			, m_JobSystem(jobSystem)
 			, m_StopRequested(false)
+			, m_HasWork(false)
 		{}
 
 		void Run() override;
@@ -37,13 +38,15 @@ namespace SV
 		ITaskQueue* GetLocalQueue() override { return &m_TaskQueue; }
 
 		int32_t GetId() const { return m_WorkerId; }
+
 	private:
-		std::unique_ptr<Task> AcquireTask();
-		void ExecuteTask(std::unique_ptr<Task> task);
+		std::shared_ptr<JobTask> AcquireTask();
+		void ExecuteTask(std::shared_ptr<JobTask> task);
 	private:
 		int32_t m_WorkerId;
 		JobSystem* m_JobSystem;
 		std::atomic<bool> m_StopRequested;
+		std::atomic<bool> m_HasWork;
 		TaskLocalQueue m_TaskQueue;
 	};
 }

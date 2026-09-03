@@ -40,12 +40,12 @@ namespace SV
 		}
 
 		// Used by workers
-		void DispatchTask(std::unique_ptr<Task> task);
-		std::unique_ptr<Task> PopGlobalQueue();
-		std::unique_ptr<Task> StealTaskFor(int32_t thiefId);
-		std::unique_ptr<Task> WaitForTask(std::atomic<bool>& stopFlag);
+		void DispatchTask(std::shared_ptr<JobTask> task);
+		std::shared_ptr<JobTask> PopGlobalQueue();
+		std::shared_ptr<JobTask> StealTaskFor(int32_t thiefId);
 
 		bool IsWorkerThread(std::thread::id threadId);
+		WorkerThread* GetCurrentWorker();
 		void WorkerThreadReady();
 
 	private:

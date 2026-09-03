@@ -5,7 +5,7 @@
 
 namespace SV
 {
-	class Task;
+	class JobTask;
 
 	enum class EThreadPriority : uint8_t
 	{
@@ -28,9 +28,9 @@ namespace SV
 	public:
 		virtual ~ITaskQueue() = default;
 
-		virtual void Push(std::unique_ptr<Task> task) = 0;
-		virtual std::unique_ptr<Task> Pop() = 0;
-		virtual std::unique_ptr<Task> Steal() = 0;
+		virtual void Push(std::shared_ptr<JobTask> task) = 0;
+		virtual std::shared_ptr<JobTask> Pop() = 0;
+		virtual std::shared_ptr<JobTask> Steal() = 0;
 		virtual void Clear() = 0;
 		virtual bool IsEmpty() const = 0;
 		virtual size_t Size() const = 0;
